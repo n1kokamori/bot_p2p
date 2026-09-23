@@ -187,7 +187,7 @@ async def buy_get_rub(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if rub <= 0:
             raise ValueError
         context.user_data["buy_rub"] = rub
-        await update.message.reply_text("По какому курсу купили? (Цена за 1 USDT в рублях, например: 92.50)")
+        await update.message.reply_text("Цена за 1 USDT в рублях, например: 92.50)")
         return BUY_RATE
     except ValueError:
         await update.message.reply_text("⚠️ Введите корректную сумму в рублях.")
@@ -228,7 +228,7 @@ async def sell_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         f"🏷 *Продажа*\n\nДоступно на балансе: `{crypto_bal:.2f} USDT`.\n"
-        "Сколько рублей вы продаете (получаете)?\n(Например: 51500)",
+        "Сколько рублей вы продаете?\n(Например: 51500)",
         parse_mode="Markdown",
         reply_markup=ReplyKeyboardRemove(),
     )
@@ -322,7 +322,7 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- СБРОС ---
 async def reset_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    confirm_keyboard = [["⚠️ Да, сбросить всё", "❌ Отмена"]]
+    confirm_keyboard = [["⚠️ Да", "❌ Отмена"]]
     markup = ReplyKeyboardMarkup(confirm_keyboard, resize_keyboard=True)
     await update.message.reply_text(
         "❗ *Сбросить всю статистику и балансы?*",
@@ -334,7 +334,7 @@ async def reset_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def reset_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     choice = update.message.text
     markup = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
-    if choice == "⚠️ Да, сбросить всё":
+    if choice == "⚠️ Да":
         reset_user_data(update.effective_user.id)
         await update.message.reply_text("✅ Балансы и история очищены.", reply_markup=markup)
     else:
