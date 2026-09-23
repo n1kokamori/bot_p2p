@@ -361,6 +361,22 @@ def main():
 
     print("Бот запущен...")
     app.run_polling()
+import threading
+from flask import Flask
+import os
+
+web_app = Flask('')
+
+@web_app.route('/')
+def home():
+    return "Бот работает!"
+
+def run_web():
+    port = int(os.environ.get("PORT", 8080))
+    web_app.run(host='0.0.0.0', port=port)
+
+# Запуск веб-сервера в фоне перед запуском бота
+threading.Thread(target=run_web, daemon=True).start()
 
 if __name__ == "__main__":
     main()
