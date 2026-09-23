@@ -24,17 +24,40 @@ MAIN_KEYBOARD = [
 ]
 
 # ----------------- КУРС ОНЛАЙН ----------------- #
+# ----------------- НАДЁЖНОЕ ПОЛУЧЕНИЕ КУРСА ОНЛАЙН ----------------- #
 async def get_live_usdt_rate():
-    url = "https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=rub"
+    """Получает рыночный курс USDT к RUB через KuCoin или резервный шлюз."""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    timeout = aiohttp.ClientTimeout(total=4)
+
+    # 1. Попытка через биржевой API KuCoin (пара USDT-RUB)
+    url_kucoin = "https://api.kucoin.com/api/v1/market/orderbook/level1?symbol=USDT-RUB"
     try:
-        timeout = aiohttp.ClientTimeout(total=4)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return float(data["tether"]["rub"])
+        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+            async with session.get(url_kucoin) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    price = float(data.get("data", {}).get("price", 0))
+                    if price > 0:
+                        return price
     except Exception:
         pass
+
+    # 2. Резервный источник: открытый шлюз открытых котировок (USD/RUB ~ USDT/RUB)
+    url_backup = "https://open.er-api.com/v6/latest/USD"
+    try:
+        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+            async with session.get(url_backup) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    price = float(data.get("rates", {}).get("RUB", 0))
+                    if price > 0:
+                        return price
+    except Exception:
+        pass
+
     return None
 
 # ----------------- БАЗА ДАННЫХ ----------------- #
