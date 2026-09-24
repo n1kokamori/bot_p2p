@@ -17,24 +17,25 @@ BOT_TOKEN = "8987123999:AAEhVzV_0qzzyQ6sNr-iv8FYm6VFFceNV70"
 BUY_RUB, BUY_RATE = 1, 2
 SELL_RUB, SELL_RATE = 3, 4
 CONFIRM_RESET = 5
+CYCLE_SUM, CYCLE_BUY_RATE, CYCLE_SELL_RATE, CYCLE_COUNT = 6, 7, 8, 9
 
+# Главная клавиатура
 MAIN_KEYBOARD = [
     ["🛒 Купить", "🏷 Продать"],
-    ["📊 Баланс и статистика", "🗑 Сброс статистики"]
+    ["🔄 Калькулятор кругов", "📊 Баланс и статистика"],
+    ["🗑 Сброс статистики"]
 ]
 
-# ----------------- КУРС ОНЛАЙН ----------------- #
-# ----------------- НАДЁЖНОЕ ПОЛУЧЕНИЕ КУРСА ОНЛАЙН ----------------- #
+# ----------------- НАДЁЖНЫЙ КУРС ОНЛАЙН ----------------- #
 async def get_live_usdt_rate():
-    """Получает рыночный курс USDT к RUB через KuCoin или резервный шлюз."""
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     }
     timeout = aiohttp.ClientTimeout(total=4)
 
-    # 1. Попытка через биржевой API KuCoin (пара USDT-RUB)
-    url_kucoin = "https://api.kucoin.com/api/v1/market/orderbook/level1?symbol=USDT-RUB"
+    # 1. Биржевой курс KuCoin
     try:
+        url_kucoin = "https://api.kucoin.com/api/v1/market/orderbook/level1?symbol=USDT-RUB"
         async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
             async with session.get(url_kucoin) as resp:
                 if resp.status == 200:
@@ -45,9 +46,9 @@ async def get_live_usdt_rate():
     except Exception:
         pass
 
-    # 2. Резервный источник: открытый шлюз открытых котировок (USD/RUB ~ USDT/RUB)
-    url_backup = "https://open.er-api.com/v6/latest/USD"
+    # 2. Резервный открытый шлюз
     try:
+        url_backup = "https://open.er-api.com/v6/latest/USD"
         async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
             async with session.get(url_backup) as resp:
                 if resp.status == 200:
@@ -159,18 +160,111 @@ def process_sell(user_id, received_rub, sell_rate):
     conn.close()
     return crypto_sold, avg_buy_rate, profit, spread
 
-# ----------------- КОМАНДЫ ----------------- #
+# ----------------- СТАРТ И МЕНЮ ----------------- #
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     get_or_create_user(update.effective_user.id)
     markup = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
     await update.message.reply_text(
-        "👋 Бот для P2P-учёта готов к работе.\n\n"
-        "• *«🛒 Купить»* — зафиксировать покупку монет (деньги сразу учтутся)\n"
-        "• *«🏷 Продать»* — зафиксировать продажу в рублях и получить спред\n"
-        "• *«📊 Баланс и статистика»* — текущие остатки и общая прибыль",
+        "👋 Бот для P2P-учёта и расчёта профита.\n\n"
+        "• *«🛒 Купить»* / *«🏷 Продать»* — фиксация реальных сделок\n"
+        "• *«🔄 Калькулятор кругов»* — расчёт доходности на N кругов\n"
+        "• *«📊 Баланс и статистика»* — текущие остатки и курс",
         parse_mode="Markdown",
         reply_markup=markup,
     )
+
+# ----------------- КАЛЬКУЛЯТОР КРУГОВ ----------------- #
+async def cycle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🔄 *Калькулятор кругов*\n\n1️⃣ Какую сумму рублей берете на 1 круг?\n(Например: 50000)",
+        parse_mode="Markdown",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    return CYCLE_SUM
+
+async def cycle_get_sum(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        val = float(update.message.text.replace(",", ".").replace(" ", ""))
+        if val <= 0:
+            raise ValueError
+        context.user_data["cycle_sum"] = val
+        await update.message.reply_text("2️⃣ По какому курсу покупаете USDT в рублях?\n(Например: 92.50)")
+        return CYCLE_BUY_RATE
+    except ValueError:
+        await update.message.reply_text("⚠️ Введите корректную сумму в рублях.")
+        return CYCLE_SUM
+
+async def cycle_get_buy_rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        val = float(update.message.text.replace(",", ".").replace(" ", ""))
+        if val <= 0:
+            raise ValueError
+        context.user_data["cycle_buy_rate"] = val
+        await update.message.reply_text("3️⃣ По какому курсу продаете USDT в рублях?\n(Например: 94.10)")
+        return CYCLE_SELL_RATE
+    except ValueError:
+        await update.message.reply_text("⚠️ Введите корректный курс покупки.")
+        return CYCLE_BUY_RATE
+
+async def cycle_get_sell_rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        val = float(update.message.text.replace(",", ".").replace(" ", ""))
+        if val <= 0:
+            raise ValueError
+        context.user_data["cycle_sell_rate"] = val
+        await update.message.reply_text("4️⃣ Сколько кругов планируете сделать?\n(Например: 5)")
+        return CYCLE_COUNT
+    except ValueError:
+        await update.message.reply_text("⚠️ Введите корректный курс продажи.")
+        return CYCLE_SELL_RATE
+
+async def cycle_get_count(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        rounds = int(update.message.text.strip())
+        if rounds <= 0:
+            raise ValueError
+
+        start_rub = context.user_data["cycle_sum"]
+        b_rate = context.user_data["cycle_buy_rate"]
+        s_rate = context.user_data["cycle_sell_rate"]
+
+        # Показатели 1 круга
+        spread = ((s_rate - b_rate) / b_rate) * 100
+        profit_1_round = start_rub * (s_rate / b_rate - 1)
+
+        # 1. Вариант без реинвестирования (крутится строго стартовая сумма)
+        profit_simple = profit_1_round * rounds
+        final_simple = start_rub + profit_simple
+
+        # 2. Вариант с полным реинвестированием (сложный процент)
+        final_compound = start_rub * ((s_rate / b_rate) ** rounds)
+        profit_compound = final_compound - start_rub
+        pnl_pct_compound = ((final_compound - start_rub) / start_rub) * 100
+
+        result = (
+            f"🎯 *Расчет на {rounds} кругов:*\n\n"
+            f"💵 Сумма входа: `{start_rub:,.2f} ₽`\n"
+            f"🛒 Курс покупки: `{b_rate:.2f} ₽`\n"
+            f"🏷 Курс продажи: `{s_rate:.2f} ₽`\n"
+            f"📊 Спред за 1 круг: `{spread:+.2f}%` (`{profit_1_round:+,.2f} ₽`)\n"
+            f"➖➖➖➖➖➖➖➖\n"
+            f"📌 *1. Фиксированный круг (без реинвеста):*\n"
+            f"• Профит: `{profit_simple:+,.2f} ₽`\n"
+            f"• Итоговый банк: `{final_simple:,.2f} ₽`\n\n"
+            f"🚀 *2. С реинвестированием (сложный процент):*\n"
+            f"• Профит: `{profit_compound:+,.2f} ₽`\n"
+            f"• Итоговый банк: `{final_compound:,.2f} ₽`\n"
+            f"• Общая доходность: `{pnl_pct_compound:+.2f}%`"
+        )
+
+        markup = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
+        await update.message.reply_text(result, parse_mode="Markdown", reply_markup=markup)
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    except ValueError:
+        await update.message.reply_text("⚠️ Введите целое положительное число кругов (например, 3 или 10).")
+        return CYCLE_COUNT
 
 # --- ПОКУПКА ---
 async def buy_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -187,7 +281,7 @@ async def buy_get_rub(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if rub <= 0:
             raise ValueError
         context.user_data["buy_rub"] = rub
-        await update.message.reply_text("Цена за 1 USDT в рублях, например: 92.50)")
+        await update.message.reply_text("По какому курсу купили? (Цена за 1 USDT в рублях, например: 92.50)")
         return BUY_RATE
     except ValueError:
         await update.message.reply_text("⚠️ Введите корректную сумму в рублях.")
@@ -228,7 +322,7 @@ async def sell_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         f"🏷 *Продажа*\n\nДоступно на балансе: `{crypto_bal:.2f} USDT`.\n"
-        "Сколько рублей вы продаете?\n(Например: 51500)",
+        "Сколько рублей вы продаете (получаете)?\n(Например: 51500)",
         parse_mode="Markdown",
         reply_markup=ReplyKeyboardRemove(),
     )
@@ -300,10 +394,10 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if live_rate and crypto_bal > 0:
         crypto_market_val = crypto_bal * live_rate
-        rate_source_text = f"`{live_rate:,.2f} ₽` *(онлайн-курс)*"
+        rate_source_text = f"`{live_rate:,.2f} ₽` *(онлайн)*"
     else:
         crypto_market_val = total_invested
-        rate_source_text = "*(по себестоимости закупки)*"
+        rate_source_text = "*(по себестоимости)*"
 
     total_assets = fiat_bal + crypto_market_val
 
@@ -320,9 +414,9 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(text, parse_mode="Markdown")
 
-# --- СБРОС ---
+# --- СБРОС СТАТИСТИКИ ---
 async def reset_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    confirm_keyboard = [["⚠️ Да", "❌ Отмена"]]
+    confirm_keyboard = [["⚠️ Да, сбросить всё", "❌ Отмена"]]
     markup = ReplyKeyboardMarkup(confirm_keyboard, resize_keyboard=True)
     await update.message.reply_text(
         "❗ *Сбросить всю статистику и балансы?*",
@@ -334,7 +428,7 @@ async def reset_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def reset_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     choice = update.message.text
     markup = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
-    if choice == "⚠️ Да":
+    if choice == "⚠️ Да, сбросить всё":
         reset_user_data(update.effective_user.id)
         await update.message.reply_text("✅ Балансы и история очищены.", reply_markup=markup)
     else:
@@ -347,11 +441,12 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Действие отменено.", reply_markup=markup)
     return ConversationHandler.END
 
-# ----------------- MAIN ----------------- #
+# ----------------- ЗАПУСК ----------------- #
 def main():
     init_db()
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    # Сценарий покупки
     buy_handler = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^🛒 Купить$"), buy_start)],
         states={
@@ -361,6 +456,7 @@ def main():
         fallbacks=[CommandHandler("cancel", cancel)],
     )
 
+    # Сценарий продажи
     sell_handler = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^🏷 Продать$"), sell_start)],
         states={
@@ -370,6 +466,19 @@ def main():
         fallbacks=[CommandHandler("cancel", cancel)],
     )
 
+    # Сценарий калькулятора кругов
+    cycle_handler = ConversationHandler(
+        entry_points=[MessageHandler(filters.Regex("^🔄 Калькулятор кругов$"), cycle_start)],
+        states={
+            CYCLE_SUM: [MessageHandler(filters.TEXT & ~filters.COMMAND, cycle_get_sum)],
+            CYCLE_BUY_RATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, cycle_get_buy_rate)],
+            CYCLE_SELL_RATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, cycle_get_sell_rate)],
+            CYCLE_COUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, cycle_get_count)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
+    # Сценарий сброса
     reset_handler = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^🗑 Сброс статистики$"), reset_start)],
         states={CONFIRM_RESET: [MessageHandler(filters.TEXT & ~filters.COMMAND, reset_confirm)]},
@@ -380,26 +489,11 @@ def main():
     app.add_handler(MessageHandler(filters.Regex("^📊 Баланс и статистика$"), balance))
     app.add_handler(buy_handler)
     app.add_handler(sell_handler)
+    app.add_handler(cycle_handler)
     app.add_handler(reset_handler)
 
     print("Бот запущен...")
     app.run_polling()
-import threading
-from flask import Flask
-import os
-
-web_app = Flask('')
-
-@web_app.route('/')
-def home():
-    return "Бот работает!"
-
-def run_web():
-    port = int(os.environ.get("PORT", 8080))
-    web_app.run(host='0.0.0.0', port=port)
-
-# Запуск веб-сервера в фоне перед запуском бота
-threading.Thread(target=run_web, daemon=True).start()
 
 if __name__ == "__main__":
     main()
